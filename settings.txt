@@ -1,0 +1,3 @@
+test.value = 42
+test.more = 10,10
+test.color = 255,255,255,255
