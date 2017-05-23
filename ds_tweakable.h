@@ -1,12 +1,15 @@
 #pragma once
+#include <Windows.h>
 #include <vector>
 #include <diesel.h>
 
 enum SettingsType {
 	ST_FLOAT,
-	ST_RECT,
 	ST_INT,
+	ST_UINT,
 	ST_VEC2,
+	ST_VEC3,
+	ST_VEC4,
 	ST_COLOR,
 	ST_NONE
 };
@@ -29,14 +32,19 @@ struct Token {
 // settings item
 // -------------------------------------------------------
 struct SettingsItem {
-	const char* name;
+	uint32_t prefixHash;
+	uint32_t hash;
 	SettingsType type;
+	int nameIndex;
+	int length;
 	union {
 		int* iPtr;
+		uint32_t* uiPtr;
 		float* fPtr;
 		ds::vec2* v2Ptr;
-		//Color* cPtr;
-		//Rect* rPtr;
+		ds::vec3* v3Ptr;
+		ds::vec4* v4Ptr;
+		ds::Color* cPtr;		
 	} ptr;
 };
 
@@ -44,10 +52,15 @@ class GameSettings {
 
 public:
 	GameSettings(const char* fileName) : _fileName(fileName) {}
+	void add(const char* name, int* value, int defaultValue = 0);
+	void add(const char* name, uint32_t* value, uint32_t defaultValue = 0);
 	void add(const char* name, float* value, float defaultValue = 0.0f);
 	void add(const char* name, ds::vec2* value, const ds::vec2& defaultValue = ds::vec2(0.0f));
+	void add(const char* name, ds::vec3* value, const ds::vec3& defaultValue = ds::vec3(0.0f));
+	void add(const char* name, ds::vec4* value, const ds::vec4& defaultValue = ds::vec4(0.0f));
+	void add(const char* name, ds::Color* value, const ds::Color& defaultValue = ds::Color(255,255,255,255));
 	void load();
-	void save();
+	void save(const char* fileName);
 	const bool contains(const char* name) const;
 	const bool contains(const char* name, SettingsType type) const;
 	const SettingsItem& get(const char* name) const;
@@ -56,17 +69,47 @@ public:
 	}
 private:
 	size_t find(const char* name) const;
-	void setValue(const char* name, float* values, int count);
+	void setValue(const char* name, int nameIndex, int length, float* values, int count);
 	const char* _fileName;
 	std::vector<SettingsItem> _items;
 	std::vector<Token> _tokens;
 	char* _text;
+	FILETIME _filetime;
 };
+
+const uint32_t FNV_Prime = 0x01000193; //   16777619
+const uint32_t FNV_Seed = 0x811C9DC5; // 2166136261
+
+inline uint32_t fnv1a(const char* text, uint32_t hash = FNV_Seed) {
+	const unsigned char* ptr = (const unsigned char*)text;
+	while (*ptr) {
+		hash = (*ptr++ ^ hash) * FNV_Prime;
+	}
+	return hash;
+}
+
+void GameSettings::add(const char* name, int* value, int defaultValue) {
+	*value = defaultValue;
+	SettingsItem item;
+	item.hash = fnv1a(name);
+	item.type = ST_INT;
+	item.ptr.iPtr = value;
+	_items.push_back(item);
+}
+
+void GameSettings::add(const char* name, uint32_t* value, uint32_t defaultValue) {
+	*value = defaultValue;
+	SettingsItem item;
+	item.hash = fnv1a(name);
+	item.type = ST_UINT;
+	item.ptr.uiPtr = value;
+	_items.push_back(item);
+}
 
 void GameSettings::add(const char* name, float* value, float defaultValue) {
 	*value = defaultValue;
 	SettingsItem item;
-	item.name = name;
+	item.hash = fnv1a(name);
 	item.type = ST_FLOAT;
 	item.ptr.fPtr = value;
 	_items.push_back(item);
@@ -75,19 +118,63 @@ void GameSettings::add(const char* name, float* value, float defaultValue) {
 void GameSettings::add(const char* name, ds::vec2* value, const ds::vec2& defaultValue) {
 	*value = defaultValue;
 	SettingsItem item;
-	item.name = name;
+	item.hash = fnv1a(name);
 	item.type = ST_VEC2;
 	item.ptr.v2Ptr = value;
 	_items.push_back(item);
 }
 
-void GameSettings::save() {
-	for (size_t i = 0; i < _items.size(); ++i) {
+void GameSettings::add(const char* name, ds::vec3* value, const ds::vec3& defaultValue) {
+	*value = defaultValue;
+	SettingsItem item;
+	item.hash = fnv1a(name);
+	item.type = ST_VEC3;
+	item.ptr.v3Ptr = value;
+	_items.push_back(item);
+}
 
+void GameSettings::add(const char* name, ds::vec4* value, const ds::vec4& defaultValue) {
+	*value = defaultValue;
+	SettingsItem item;
+	item.hash = fnv1a(name);
+	item.type = ST_VEC4;
+	item.ptr.v4Ptr = value;
+	_items.push_back(item);
+}
+
+void GameSettings::add(const char* name, ds::Color* value, const ds::Color& defaultValue) {
+	*value = defaultValue;
+	SettingsItem item;
+	item.hash = fnv1a(name);
+	item.type = ST_COLOR;
+	item.ptr.cPtr = value;
+	_items.push_back(item);
+}
+
+void GameSettings::save(const char* fileName) {
+	char name[128];
+	FILE* fp = fopen(fileName, "w");
+	if (fp) {
+		for (size_t i = 0; i < _items.size(); ++i) {
+			const SettingsItem& item = _items[i];
+			strncpy(name, _text + item.nameIndex, item.length);
+			name[item.length] = '\0';
+			fprintf(fp, "%s = ", name);
+			switch (item.type) {
+				case ST_INT: fprintf(fp, "%d\n", *item.ptr.iPtr); break;
+				case ST_UINT: fprintf(fp, "%d\n", *item.ptr.uiPtr); break;
+				case ST_FLOAT: fprintf(fp, "%g\n", *item.ptr.fPtr); break;
+				case ST_VEC2 : fprintf(fp, "%g, %g\n", item.ptr.v2Ptr->x, item.ptr.v2Ptr->y); break;
+				case ST_VEC3: fprintf(fp, "%g, %g, %g\n", item.ptr.v3Ptr->x, item.ptr.v3Ptr->y, item.ptr.v3Ptr->z); break;
+				case ST_VEC4: fprintf(fp, "%g, %g, %g, %g\n", item.ptr.v4Ptr->x, item.ptr.v4Ptr->y, item.ptr.v4Ptr->z, item.ptr.v4Ptr->w); break;
+				case ST_COLOR: fprintf(fp, "%d, %d, %d, %d\n", (item.ptr.cPtr->r * 255.0f), (item.ptr.cPtr->g * 255.0f), (item.ptr.cPtr->b * 255.0f), (item.ptr.cPtr->a * 255.0f)); break;
+			}
+		}
+		fclose(fp);
 	}
 }
 
-char* loadFile(const char* fileName) {
+char* loadFile(const char* fileName, FILETIME* time) {
 	int size = 0;
 	FILE *fp = fopen(fileName, "rb");
 	if (fp) {
@@ -98,6 +185,7 @@ char* loadFile(const char* fileName) {
 		fread(buffer, 1, sz, fp);
 		buffer[sz] = '\0';
 		fclose(fp);
+		getFileTime(fileName, time);
 		return buffer;
 	}
 	return 0;
@@ -155,31 +243,68 @@ float mystrtof(const char* p, char** endPtr) {
 }
 
 size_t GameSettings::find(const char* name) const {
+	uint32_t hash = fnv1a(name);
 	for (size_t i = 0; i < _items.size(); ++i) {
-		if (strcmp(_items[i].name, name) == 0) {
+		if (_items[i].hash == hash) {
 			return i;
 		}
 	}
 	return -1;
 }
 
-void GameSettings::setValue(const char* name, float* values, int count) {
+void GameSettings::setValue(const char* name, int nameIndex, int length, float* values, int count) {
 	size_t idx = find(name);
 	if (idx != -1) {
 		SettingsItem& item = _items[idx];
-		if (item.type == ST_FLOAT && count == 1) {
+		item.nameIndex = nameIndex;
+		item.length = length;
+		if (item.type == ST_INT && count == 1) {
+			*item.ptr.iPtr = values[0];
+		}
+		else if (item.type == ST_UINT && count == 1) {
+			*item.ptr.uiPtr = values[0];
+		}
+		else if (item.type == ST_FLOAT && count == 1) {
 			*item.ptr.fPtr = values[0];
 		}
 		else if (item.type == ST_VEC2 && count == 2) {
 			item.ptr.v2Ptr->x = values[0];
 			item.ptr.v2Ptr->y = values[1];
 		}
+		else if (item.type == ST_VEC3 && count == 3) {
+			item.ptr.v3Ptr->x = values[0];
+			item.ptr.v3Ptr->y = values[1];
+			item.ptr.v3Ptr->z = values[2];
+		}
+		else if (item.type == ST_VEC4 && count == 4) {
+			item.ptr.v4Ptr->x = values[0];
+			item.ptr.v4Ptr->y = values[1];
+			item.ptr.v4Ptr->z = values[2];
+			item.ptr.v4Ptr->w = values[3];
+		}
+		else if (item.type == ST_COLOR && count == 4) {
+			item.ptr.cPtr->r = values[0] / 255.0f;
+			item.ptr.cPtr->g = values[1] / 255.0f;
+			item.ptr.cPtr->b = values[2] / 255.0f;
+			item.ptr.cPtr->a = values[3] / 255.0f;
+		}
+	}
+}
+
+void getFileTime(const char* fileName, FILETIME* time) {
+	WORD ret = -1;
+	// no file sharing mode
+	HANDLE hFile = CreateFile(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+	if (hFile != INVALID_HANDLE_VALUE) {
+		// Retrieve the file times for the file.
+		GetFileTime(hFile, NULL, NULL, time);
+		CloseHandle(hFile);
 	}
 }
 
 void GameSettings::load() {
 	int cnt = 0;
-	_text = loadFile(_fileName);
+	_text = loadFile(_fileName, &_filetime);
 	const char* p = _text;
 	while (*p != 0) {
 		Token token(Token::EMPTY);
@@ -217,7 +342,6 @@ void GameSettings::load() {
 			_tokens.push_back(token);
 		}
 	}
-	printf("tokens: %d\n", _tokens.size());
 	int idx = 0;
 	Token& t = _tokens[idx];
 	char name[128];
@@ -227,8 +351,6 @@ void GameSettings::load() {
 			strncpy(name, _text + t.index, t.size);
 			name[t.size] = '\0';
 			++idx;
-			// build hash
-			// get value index
 			Token& n = _tokens[idx];
 			if (n.type == Token::ASSIGN) {
 				++idx;
@@ -236,8 +358,9 @@ void GameSettings::load() {
 				int count = 0;
 				while (v.type == Token::NUMBER || v.type == Token::DELIMITER) {
 					if (v.type == Token::NUMBER) {
-						// add value
-						values[count++] = v.value;
+						if (count < 128) {
+							values[count++] = v.value;
+						}
 					}
 					++idx;
 					if (idx >= _tokens.size()) {
@@ -245,8 +368,7 @@ void GameSettings::load() {
 					}
 					v = _tokens[idx];
 				}
-				// FIXME: find item
-				setValue(name, values, count);
+				setValue(name, t.index, t.size, values, count);
 			}
 		}
 		else {
