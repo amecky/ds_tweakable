@@ -1,9 +1,16 @@
 #pragma once
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif // !_CRT_SECURE_NO_WARNINGS
 #include <Windows.h>
 #include <vector>
 #include <diesel.h>
 
 void twk_init(const char* fileName);
+
+void twk_add(const char* category, const char* name, int* value);
+
+void twk_add(const char* category, const char* name, uint32_t* value);
 
 void twk_add(const char* category, const char* name, float* value);
 
@@ -13,17 +20,23 @@ void twk_add(const char* category, const char* name, ds::vec3* value);
 
 void twk_add(const char* category, const char* name, ds::vec4* value);
 
+void twk_add(const char* category, const char* name, ds::Color* value);
+
 void twk_add(const char* category, const char* name, float* array,int size);
 
 void twk_shutdown();
 
 bool twk_load();
 
+void twk_parse(const char* text);
+
 void twk_save();
 
 //#define GAMESETTINGS_IMPLEMENTATION
 
 #ifdef GAMESETTINGS_IMPLEMENTATION
+
+
 
 
 // -------------------------------------------------------
@@ -52,14 +65,17 @@ struct GameSettingsItem {
 	int arrayLength;
 };
 
+// -------------------------------------------------------
+// internal char buffer
+// -------------------------------------------------------
 struct InternalCharBuffer {
 	char* data;
-	int capacity;
-	int size;
-	int next;
+	size_t capacity;
+	size_t size;
 	int count;
-	int* indices;
-	int* sizes;
+	size_t* indices;
+	size_t* sizes;
+	size_t indexCapacity;
 };
 
 // -------------------------------------------------------
@@ -85,10 +101,10 @@ void twk_init(const char* fileName) {
 	_settingsCtx->charBuffer.data = 0;
 	_settingsCtx->charBuffer.capacity = 0;
 	_settingsCtx->charBuffer.count = 0;
-	_settingsCtx->charBuffer.next = 0;
 	_settingsCtx->charBuffer.indices = 0;
 	_settingsCtx->charBuffer.sizes = 0;
 	_settingsCtx->charBuffer.size = 0;
+	_settingsCtx->charBuffer.indexCapacity = 0;
 }
 
 // -------------------------------------------------------
@@ -96,6 +112,15 @@ void twk_init(const char* fileName) {
 // -------------------------------------------------------
 void twk_shutdown() {
 	if (_settingsCtx != 0) {
+		if (_settingsCtx->charBuffer.data != 0) {
+			delete[] _settingsCtx->charBuffer.data;
+		}
+		if (_settingsCtx->charBuffer.indices != 0) {
+			delete[] _settingsCtx->charBuffer.indices;
+		}
+		if (_settingsCtx->charBuffer.sizes != 0) {
+			delete[] _settingsCtx->charBuffer.sizes;
+		}
 		delete _settingsCtx;
 	}
 }
@@ -117,7 +142,7 @@ inline uint32_t twk_fnv1a(const char* text, uint32_t hash = FNV_Seed) {
 // -------------------------------------------------------
 // internal add
 // -------------------------------------------------------
-static size_t twk_add(const char* category, const char* name, GameSettingsItem::SettingsType type) {
+static size_t twk_internal_add(const char* category, const char* name, GameSettingsItem::SettingsType type) {
 	GameSettingsItem item;
 	item.categoryHash = twk_fnv1a(category);
 	item.hash = twk_fnv1a(name);
@@ -128,10 +153,26 @@ static size_t twk_add(const char* category, const char* name, GameSettingsItem::
 }
 
 // -------------------------------------------------------
+// add int
+// -------------------------------------------------------
+void twk_add(const char* category, const char* name, int* value) {
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_INT);
+	_settingsCtx->items[idx].ptr.iPtr = value;
+}
+
+// -------------------------------------------------------
+// add uint32_t
+// -------------------------------------------------------
+void twk_add(const char* category, const char* name, uint32_t* value) {
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_UINT);
+	_settingsCtx->items[idx].ptr.uiPtr = value;
+}
+
+// -------------------------------------------------------
 // add float
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, float* value) {
-	size_t idx = twk_add(category, name, GameSettingsItem::ST_FLOAT);
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_FLOAT);
 	_settingsCtx->items[idx].ptr.fPtr = value;
 }
 
@@ -139,7 +180,7 @@ void twk_add(const char* category, const char* name, float* value) {
 // add vec2
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec2* value) {
-	size_t idx = twk_add(category, name, GameSettingsItem::ST_VEC2);
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC2);
 	_settingsCtx->items[idx].ptr.v2Ptr = value;
 }
 
@@ -147,7 +188,7 @@ void twk_add(const char* category, const char* name, ds::vec2* value) {
 // add vec3
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec3* value) {
-	size_t idx = twk_add(category, name, GameSettingsItem::ST_VEC3);
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC3);
 	_settingsCtx->items[idx].ptr.v3Ptr = value;
 }
 
@@ -155,15 +196,23 @@ void twk_add(const char* category, const char* name, ds::vec3* value) {
 // add vec4
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec4* value) {
-	size_t idx = twk_add(category, name, GameSettingsItem::ST_VEC4);
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC4);
 	_settingsCtx->items[idx].ptr.v4Ptr = value;
+}
+
+// -------------------------------------------------------
+// add color
+// -------------------------------------------------------
+void twk_add(const char* category, const char* name, ds::Color* value) {
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_COLOR);
+	_settingsCtx->items[idx].ptr.cPtr = value;
 }
 
 // -------------------------------------------------------
 // add array
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, float* array, int size) {
-	size_t idx = twk_add(category, name, GameSettingsItem::ST_ARRAY);
+	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_ARRAY);
 	_settingsCtx->items[idx].ptr.arPtr = array;
 	_settingsCtx->items[idx].arrayLength = size;
 }
@@ -187,33 +236,52 @@ struct Token {
 };
 
 // -------------------------------------------------------
-// internal char buffer reallocate
+// internal char buffer reallocation
 // -------------------------------------------------------
-static void twk_realloc_char_buffer(int additional) {
-	if (_settingsCtx->charBuffer.data == 0) {
-		_settingsCtx->charBuffer.data = new char[additional];
-		_settingsCtx->charBuffer.capacity = additional;
-		_settingsCtx->charBuffer.indices = new int[16];
-		_settingsCtx->charBuffer.sizes = new int[16];
+static void twk_realloc_char_buffer(InternalCharBuffer* buffer, size_t additional) {
+	if (buffer->data == 0) {
+		buffer->data = new char[additional];
+		buffer->capacity = additional;
+		buffer->indices = new size_t[16];
+		buffer->sizes = new size_t[16];
+		buffer->indexCapacity = 16;
 	}
 	else {
-		char* tmp = new char[_settingsCtx->charBuffer.capacity + additional];
-		memcpy(tmp, _settingsCtx->charBuffer.data, _settingsCtx->charBuffer.capacity);
-		_settingsCtx->charBuffer.capacity = _settingsCtx->charBuffer.capacity + additional;
-		delete[] _settingsCtx->charBuffer.data;
-		_settingsCtx->charBuffer.data = tmp;
+		char* tmp = new char[buffer->capacity + additional];
+		memcpy(tmp, buffer->data, buffer->capacity);
+		buffer->capacity = buffer->capacity + additional;
+		delete[] buffer->data;
+		buffer->data = tmp;
 	}
+}
+
+// -------------------------------------------------------
+// internal char buffer indices reallocation
+// -------------------------------------------------------
+static void twk_reallocate_indices(InternalCharBuffer* buffer, size_t additional) {
+	size_t* tmpi = new size_t[buffer->indexCapacity + additional];
+	memcpy(tmpi, buffer->indices, buffer->count);
+	delete[] buffer->indices;
+	buffer->indices = tmpi;
+	size_t* tmps = new size_t[buffer->indexCapacity + additional];
+	memcpy(tmps, buffer->sizes, buffer->count);
+	delete[] buffer->sizes;
+	buffer->sizes = tmps;
+	buffer->indexCapacity += additional;
 }
 
 // -------------------------------------------------------
 // internal add string to char buffer
 // -------------------------------------------------------
 static int twk_add_string(const char* txt) {
-	int l = strlen(txt);
+	size_t l = strlen(txt);
 	if ((l + _settingsCtx->charBuffer.size) >= _settingsCtx->charBuffer.capacity) {
-		twk_realloc_char_buffer(l * 2);
+		twk_realloc_char_buffer(&_settingsCtx->charBuffer, l * 2);
 	}
-	int current = _settingsCtx->charBuffer.size;
+	if (_settingsCtx->charBuffer.count + 1 >= _settingsCtx->charBuffer.indexCapacity) {
+		twk_reallocate_indices(&_settingsCtx->charBuffer, 16);
+	}
+	size_t current = _settingsCtx->charBuffer.size;
 	char* dest = _settingsCtx->charBuffer.data + current;
 	_settingsCtx->charBuffer.indices[_settingsCtx->charBuffer.count] = current;
 	_settingsCtx->charBuffer.sizes[_settingsCtx->charBuffer.count] = l;
@@ -240,7 +308,7 @@ void twk_save() {
 				}
 				int cidx = item.categoryNameIndex;
 				char* src = _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[cidx];
-				int l = _settingsCtx->charBuffer.sizes[cidx];
+				size_t l = _settingsCtx->charBuffer.sizes[cidx];
 				strncpy(name, src, l);
 				name[l] = '\0';
 				fprintf(fp, "%s {\n", name);
@@ -248,7 +316,7 @@ void twk_save() {
 			}
 			int nidx = item.nameIndex;
 			char* src = _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[nidx];
-			int l = _settingsCtx->charBuffer.sizes[nidx];
+			size_t l = _settingsCtx->charBuffer.sizes[nidx];
 			strncpy(name, src, l);
 			name[l] = '\0';
 			fprintf(fp, "\t%s : ", name);
@@ -259,7 +327,17 @@ void twk_save() {
 				case GameSettingsItem::ST_VEC2 : fprintf(fp, "%g, %g\n", item.ptr.v2Ptr->x, item.ptr.v2Ptr->y); break;
 				case GameSettingsItem::ST_VEC3: fprintf(fp, "%g, %g, %g\n", item.ptr.v3Ptr->x, item.ptr.v3Ptr->y, item.ptr.v3Ptr->z); break;
 				case GameSettingsItem::ST_VEC4: fprintf(fp, "%g, %g, %g, %g\n", item.ptr.v4Ptr->x, item.ptr.v4Ptr->y, item.ptr.v4Ptr->z, item.ptr.v4Ptr->w); break;
-				case GameSettingsItem::ST_COLOR: fprintf(fp, "%d, %d, %d, %d\n", (item.ptr.cPtr->r * 255.0f), (item.ptr.cPtr->g * 255.0f), (item.ptr.cPtr->b * 255.0f), (item.ptr.cPtr->a * 255.0f)); break;
+				case GameSettingsItem::ST_COLOR: {
+					for (int j = 0; j < 4; ++j) {
+						if (j != 0) {
+							fprintf(fp, ", ");
+						}
+						int v = static_cast<int>(item.ptr.cPtr->values[j] * 255.0f);
+						fprintf(fp, "%d", v);
+					}
+					fprintf(fp, "\n");
+					break;
+				}
 				case GameSettingsItem::ST_ARRAY: {
 					int la = item.arrayLength;
 					for (int j = 0; j < la; ++j) {
@@ -281,7 +359,7 @@ void twk_save() {
 // -------------------------------------------------------
 // settings item
 // -------------------------------------------------------
-static void twk_get_filetime(const char* fileName, FILETIME* time) {
+static bool twk_get_filetime(const char* fileName, FILETIME* time) {
 	WORD ret = -1;
 	// no file sharing mode
 	HANDLE hFile = CreateFile(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
@@ -289,7 +367,9 @@ static void twk_get_filetime(const char* fileName, FILETIME* time) {
 		// Retrieve the file times for the file.
 		GetFileTime(hFile, NULL, NULL, time);
 		CloseHandle(hFile);
+		return true;
 	}
+	return false;
 }
 
 // -------------------------------------------------------
@@ -326,6 +406,12 @@ static bool twk_is_numeric(const char c) {
 	return ((c >= '0' && c <= '9'));
 }
 
+// -------------------------------------------------------
+// internal is name char
+// -------------------------------------------------------
+static bool twk_is_name(const char c) {
+	return ((c >= 'A' && c <= 'Z')|| (c >= 'a' && c <= 'z') || c == '_' || c == '-');
+}
 // -------------------------------------------------------
 // internal is whitespace
 // -------------------------------------------------------
@@ -399,10 +485,10 @@ static void twk_set_value(uint32_t catHash, int categoryNameIndex, const char* n
 		item.length = length;
 		item.categoryNameIndex = categoryNameIndex;
 		if (item.type == GameSettingsItem::ST_INT && count == 1) {
-			*item.ptr.iPtr = values[0];
+			*item.ptr.iPtr = static_cast<int>(values[0]);
 		}
 		else if (item.type == GameSettingsItem::ST_UINT && count == 1) {
-			*item.ptr.uiPtr = values[0];
+			*item.ptr.uiPtr = static_cast<uint32_t>(values[0]);
 		}
 		else if (item.type == GameSettingsItem::ST_FLOAT && count == 1) {
 			*item.ptr.fPtr = values[0];
@@ -444,12 +530,106 @@ static bool twk_requires_loading() {
 		return true;
 	}
 	FILETIME now;
-	twk_get_filetime(_settingsCtx->fileName, &now);
-	if (CompareFileTime(&_settingsCtx->filetime, &now) == -1) {
-		_settingsCtx->filetime = now;
-		return true;
+	if (twk_get_filetime(_settingsCtx->fileName, &now)) {
+		if (CompareFileTime(&_settingsCtx->filetime, &now) == -1) {
+			_settingsCtx->filetime = now;
+			return true;
+		}
 	}
 	return false;
+}
+
+// -------------------------------------------------------
+// internal check if the file should be (re)loaded
+// -------------------------------------------------------
+void twk_parse(const char* text) {
+	// FIXME: reset internal char buffer
+	const char* p = text;
+	std::vector<Token> tokens;
+	while (*p != 0) {
+		Token token(Token::EMPTY);
+		if (twk_is_digit(*p)) {
+			char *out;
+			token = Token(Token::NUMBER, twk_strtof(p, &out));
+			p = out;
+		}
+		else if (twk_is_name(*p)) {
+			const char *identifier = p;
+			while (twk_is_name(*p)) {
+				p++;
+			}
+			token = Token(Token::NAME, identifier - text, p - identifier);
+		}
+		else if (*p == '#') {
+			++p;
+			while (*p != '\n') {
+				++p;
+				if (*p == 0) {
+					break;
+				}
+			}
+		}
+		else {
+			switch (*p) {
+			case '{': token = Token(Token::OPEN_BRACES); break;
+			case '}': token = Token(Token::CLOSE_BRACES); break;
+			case ' ': case '\t': case '\n': case '\r': break;
+			case ':': token = Token(Token::ASSIGN); break;
+			case ',': token = Token(Token::DELIMITER); break;
+			}
+			++p;
+		}
+		if (token.type != Token::EMPTY) {
+			tokens.push_back(token);
+		}
+	}
+	int idx = 0;
+	Token& t = tokens[idx];
+	char name[128];
+	float values[128];
+	uint32_t catHash = 0;
+	int currentCategory = -1;
+	int currentName = -1;
+	while (idx < tokens.size()) {
+		if (t.type == Token::NAME) {
+			strncpy(name, text + t.index, t.size);
+			name[t.size] = '\0';
+			int strIdx = twk_add_string(name);
+			++idx;
+			Token& n = tokens[idx];
+			if (n.type == Token::OPEN_BRACES) {
+				catHash = twk_fnv1a(name);
+				currentCategory = strIdx;
+			}
+			else if (n.type == Token::ASSIGN) {
+				++idx;
+				Token& v = tokens[idx];
+				int count = 0;
+				while (v.type == Token::NUMBER || v.type == Token::DELIMITER) {
+					if (v.type == Token::NUMBER) {
+						if (count < 128) {
+							values[count++] = v.value;
+						}
+					}
+					++idx;
+					if (idx >= tokens.size()) {
+						break;
+					}
+					v = tokens[idx];
+				}
+				twk_set_value(catHash, currentCategory, name, strIdx, t.size, values, count);
+			}
+			else {
+				++idx;
+			}
+		}
+		else {
+			++idx;
+		}
+		if (idx < tokens.size()) {
+			t = tokens[idx];
+		}
+	}
 }
 
 // -------------------------------------------------------
@@ -460,100 +640,8 @@ bool twk_load() {
 		_settingsCtx->loaded = true;
 		int cnt = 0;
 		const char* _text = twk_load_file(_settingsCtx->fileName, &_settingsCtx->filetime);
-		const char* p = _text;
-		std::vector<Token> tokens;
-		while (*p != 0) {
-			Token token(Token::EMPTY);
-			if (twk_is_digit(*p)) {
-				char *out;
-				token = Token(Token::NUMBER, twk_strtof(p, &out));
-				p = out;
-			}
-			else if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) {
-				const char *identifier = p;
-				while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z'))
-					p++;
-				token = Token(Token::NAME, identifier - _text, p - identifier);
-			}
-			else if (*p == '#') {
-				++p;
-				while (*p != '\n') {
-					++p;
-					if (*p == 0) {
-						break;
-					}
-				}
-			}
-			else {
-				switch (*p) {
-				case '{': token = Token(Token::OPEN_BRACES); break;
-				case '}': token = Token(Token::CLOSE_BRACES); break;
-				case ' ': case '\t': case '\n': case '\r': break;
-				case ':': token = Token(Token::ASSIGN); break;
-				case ',': token = Token(Token::DELIMITER); break;
-				}
-				++p;
-			}
-			if (token.type != Token::EMPTY) {
-				tokens.push_back(token);
-			}
-		}
-		int idx = 0;
-		Token& t = tokens[idx];
-		char name[128];
-		float values[128];
-		uint32_t catHash = 0;
-		int currentCategory = -1;
-		int currentName = -1;
-		while (idx < tokens.size()) {
-			if (t.type == Token::NAME) {
-				strncpy(name, _text + t.index, t.size);
-				name[t.size] = '\0';
-				int strIdx = twk_add_string(name);
-				++idx;
-				Token& n = tokens[idx];
-				if (n.type == Token::OPEN_BRACES) {
-					catHash = twk_fnv1a(name);
-					currentCategory = strIdx;
-				}
-				else if (n.type == Token::ASSIGN) {
-					++idx;
-					Token& v = tokens[idx];
-					int count = 0;
-					while (v.type == Token::NUMBER || v.type == Token::DELIMITER) {
-						if (v.type == Token::NUMBER) {
-							if (count < 128) {
-								values[count++] = v.value;
-							}
-						}
-						++idx;
-						if (idx >= tokens.size()) {
-							break;
-						}
-						v = tokens[idx];
-					}
-					twk_set_value(catHash, currentCategory, name, strIdx, t.size, values, count);
-				}
-				else {
-					++idx;
-				}
-			}
-			else {
-				++idx;
-			}
-			if (idx < tokens.size()) {
-				t = tokens[idx];
-			}
-		}
+		twk_parse(_text);
 		delete[] _text;
-		for (int i = 0; i < _settingsCtx->charBuffer.count; ++i) {
-			char* source = _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[i];
-			int length = _settingsCtx->charBuffer.sizes[i];
-			strncpy(name, source, length);
-			name[length] = '\0';
-			printf("%d : %d / %d = %s\n", i, _settingsCtx->charBuffer.indices[i], _settingsCtx->charBuffer.sizes[i], name);
-			
-		}
 		return true;
 	}
 	return false;

@@ -9,4 +9,7 @@
   <ItemGroup>
     <Text Include="settings.json" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="TODO.md" />
+  </ItemGroup>
 </Project>
