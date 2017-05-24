@@ -7,6 +7,6 @@
     <ClInclude Include="ds_tweakable.h" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="settings.txt" />
+    <Text Include="settings.json" />
   </ItemGroup>
 </Project>

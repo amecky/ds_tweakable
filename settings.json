@@ -1,0 +1,12 @@
+# and more
+test {
+	value : 42
+	more : 10,20
+	# test me
+	color : 128,192,64,255
+	vthree : 1,2,3
+	vfour : 103,203,303,404
+	iv : -5
+	uiv : 100
+	array : 10,11,12,13,14,15,16,17,18,19
+}
