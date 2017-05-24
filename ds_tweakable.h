@@ -128,13 +128,13 @@ void twk_shutdown() {
 // -------------------------------------------------------
 // Hashing
 // -------------------------------------------------------
-const uint32_t FNV_Prime = 0x01000193; 
-const uint32_t FNV_Seed = 0x811C9DC5;
+const uint32_t TWK__FNV_Prime = 0x01000193; 
+const uint32_t TWK__FNV_Seed = 0x811C9DC5;
 
-inline uint32_t twk_fnv1a(const char* text, uint32_t hash = FNV_Seed) {
+inline uint32_t twk_fnv1a(const char* text, uint32_t hash = TWK__FNV_Seed) {
 	const unsigned char* ptr = (const unsigned char*)text;
 	while (*ptr) {
-		hash = (*ptr++ ^ hash) * FNV_Prime;
+		hash = (*ptr++ ^ hash) * TWK__FNV_Prime;
 	}
 	return hash;
 }
@@ -220,14 +220,14 @@ void twk_add(const char* category, const char* name, float* array, int size) {
 // -------------------------------------------------------
 // internal token struct
 // -------------------------------------------------------
-struct Token {
+struct TWKToken {
 
 	enum TokenType { EMPTY, NUMBER, NAME, DELIMITER, OPEN_BRACES, CLOSE_BRACES, ASSIGN };
 
-	Token() {}
-	Token(TokenType type) : type(type) {}
-	Token(TokenType type, float v) : type(type), value(v) {}
-	Token(TokenType type, int i, int s) : type(type), index(i), size(s) {}
+	TWKToken() {}
+	TWKToken(TokenType type) : type(type) {}
+	TWKToken(TokenType type, float v) : type(type), value(v) {}
+	TWKToken(TokenType type, int i, int s) : type(type), index(i), size(s) {}
 
 	TokenType type;
 	float value;
@@ -238,7 +238,7 @@ struct Token {
 // -------------------------------------------------------
 // internal char buffer reallocation
 // -------------------------------------------------------
-static void twk_realloc_char_buffer(InternalCharBuffer* buffer, size_t additional) {
+static void twk__realloc_char_buffer(InternalCharBuffer* buffer, size_t additional) {
 	if (buffer->data == 0) {
 		buffer->data = new char[additional];
 		buffer->capacity = additional;
@@ -258,7 +258,7 @@ static void twk_realloc_char_buffer(InternalCharBuffer* buffer, size_t additiona
 // -------------------------------------------------------
 // internal char buffer indices reallocation
 // -------------------------------------------------------
-static void twk_reallocate_indices(InternalCharBuffer* buffer, size_t additional) {
+static void twk__reallocate_indices(InternalCharBuffer* buffer, size_t additional) {
 	size_t* tmpi = new size_t[buffer->indexCapacity + additional];
 	memcpy(tmpi, buffer->indices, buffer->count);
 	delete[] buffer->indices;
@@ -273,13 +273,13 @@ static void twk_reallocate_indices(InternalCharBuffer* buffer, size_t additional
 // -------------------------------------------------------
 // internal add string to char buffer
 // -------------------------------------------------------
-static int twk_add_string(const char* txt) {
+static int twk__add_string(const char* txt) {
 	size_t l = strlen(txt);
 	if ((l + _settingsCtx->charBuffer.size) >= _settingsCtx->charBuffer.capacity) {
-		twk_realloc_char_buffer(&_settingsCtx->charBuffer, l * 2);
+		twk__realloc_char_buffer(&_settingsCtx->charBuffer, l * 2);
 	}
 	if (_settingsCtx->charBuffer.count + 1 >= _settingsCtx->charBuffer.indexCapacity) {
-		twk_reallocate_indices(&_settingsCtx->charBuffer, 16);
+		twk__reallocate_indices(&_settingsCtx->charBuffer, 16);
 	}
 	size_t current = _settingsCtx->charBuffer.size;
 	char* dest = _settingsCtx->charBuffer.data + current;
@@ -359,7 +359,7 @@ void twk_save() {
 // -------------------------------------------------------
 // settings item
 // -------------------------------------------------------
-static bool twk_get_filetime(const char* fileName, FILETIME* time) {
+static bool twk__get_filetime(const char* fileName, FILETIME* time) {
 	WORD ret = -1;
 	// no file sharing mode
 	HANDLE hFile = CreateFile(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
@@ -375,7 +375,7 @@ static bool twk_get_filetime(const char* fileName, FILETIME* time) {
 // -------------------------------------------------------
 // internal load file
 // -------------------------------------------------------
-static char* twk_load_file(const char* fileName, FILETIME* time) {
+static char* twk__load_file(const char* fileName, FILETIME* time) {
 	int size = 0;
 	FILE *fp = fopen(fileName, "r");
 	if (fp) {
@@ -386,7 +386,7 @@ static char* twk_load_file(const char* fileName, FILETIME* time) {
 		fread(buffer, 1, sz, fp);
 		buffer[sz] = '\0';
 		fclose(fp);
-		twk_get_filetime(fileName, time);
+		twk__get_filetime(fileName, time);
 		return buffer;
 	}
 	return 0;
@@ -395,27 +395,27 @@ static char* twk_load_file(const char* fileName, FILETIME* time) {
 // -------------------------------------------------------
 // internal is digit
 // -------------------------------------------------------
-static bool twk_is_digit(const char c) {
+static bool twk__is_digit(const char c) {
 	return ((c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.');
 }
 
 // -------------------------------------------------------
 // internal is numeric
 // -------------------------------------------------------
-static bool twk_is_numeric(const char c) {
+static bool twk__is_numeric(const char c) {
 	return ((c >= '0' && c <= '9'));
 }
 
 // -------------------------------------------------------
 // internal is name char
 // -------------------------------------------------------
-static bool twk_is_name(const char c) {
+static bool twk__is_name(const char c) {
 	return ((c >= 'A' && c <= 'Z')|| (c >= 'a' && c <= 'z') || c == '_' || c == '-');
 }
 // -------------------------------------------------------
 // internal is whitespace
 // -------------------------------------------------------
-static bool twk_is_whitespace(const char c) {
+static bool twk__is_whitespace(const char c) {
 	if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
 		return true;
 	}
@@ -425,8 +425,8 @@ static bool twk_is_whitespace(const char c) {
 // -------------------------------------------------------
 // internal string to float
 // -------------------------------------------------------
-static float twk_strtof(const char* p, char** endPtr) {
-	while (twk_is_whitespace(*p)) {
+static float twk__strtof(const char* p, char** endPtr) {
+	while (twk__is_whitespace(*p)) {
 		++p;
 	}
 	float sign = 1.0f;
@@ -438,7 +438,7 @@ static float twk_strtof(const char* p, char** endPtr) {
 		++p;
 	}
 	float value = 0.0f;
-	while (twk_is_numeric(*p)) {
+	while (twk__is_numeric(*p)) {
 		value *= 10.0f;
 		value = value + (*p - '0');
 		++p;
@@ -447,7 +447,7 @@ static float twk_strtof(const char* p, char** endPtr) {
 		++p;
 		float dec = 1.0f;
 		float frac = 0.0f;
-		while (twk_is_numeric(*p)) {
+		while (twk__is_numeric(*p)) {
 			frac *= 10.0f;
 			frac = frac + (*p - '0');
 			dec *= 10.0f;
@@ -464,7 +464,7 @@ static float twk_strtof(const char* p, char** endPtr) {
 // -------------------------------------------------------
 // internal find variable
 // -------------------------------------------------------
-static size_t twk_find(uint32_t categoryHash, const char* name) {
+static size_t twk__find(uint32_t categoryHash, const char* name) {
 	uint32_t hash = twk_fnv1a(name);
 	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
 		if (_settingsCtx->items[i].hash == hash && _settingsCtx->items[i].categoryHash == categoryHash) {
@@ -477,8 +477,8 @@ static size_t twk_find(uint32_t categoryHash, const char* name) {
 // -------------------------------------------------------
 // internal set value
 // -------------------------------------------------------
-static void twk_set_value(uint32_t catHash, int categoryNameIndex, const char* name, int nameIndex, int length, float* values, int count) {
-	size_t idx = twk_find(catHash, name);
+static void twk__set_value(uint32_t catHash, int categoryNameIndex, const char* name, int nameIndex, int length, float* values, int count) {
+	size_t idx = twk__find(catHash, name);
 	if (idx != -1) {
 		GameSettingsItem& item = _settingsCtx->items[idx];
 		item.nameIndex = nameIndex;
@@ -525,12 +525,12 @@ static void twk_set_value(uint32_t catHash, int categoryNameIndex, const char* n
 // -------------------------------------------------------
 // internal check if the file should be (re)loaded
 // -------------------------------------------------------
-static bool twk_requires_loading() {
+static bool twk__requires_loading() {
 	if (!_settingsCtx->loaded) {
 		return true;
 	}
 	FILETIME now;
-	if (twk_get_filetime(_settingsCtx->fileName, &now)) {
+	if (twk__get_filetime(_settingsCtx->fileName, &now)) {
 		if (CompareFileTime(&_settingsCtx->filetime, &now) == -1) {
 			_settingsCtx->filetime = now;
 			return true;
@@ -545,20 +545,20 @@ static bool twk_requires_loading() {
 void twk_parse(const char* text) {
 	// FIXME: reset internal char buffer
 	const char* p = text;
-	std::vector<Token> tokens;
+	std::vector<TWKToken> tokens;
 	while (*p != 0) {
-		Token token(Token::EMPTY);
-		if (twk_is_digit(*p)) {
+		TWKToken token(TWKToken::EMPTY);
+		if (twk__is_digit(*p)) {
 			char *out;
-			token = Token(Token::NUMBER, twk_strtof(p, &out));
+			token = TWKToken(TWKToken::NUMBER, twk__strtof(p, &out));
 			p = out;
 		}
-		else if (twk_is_name(*p)) {
+		else if (twk__is_name(*p)) {
 			const char *identifier = p;
-			while (twk_is_name(*p)) {
+			while (twk__is_name(*p)) {
 				p++;
 			}
-			token = Token(Token::NAME, identifier - text, p - identifier);
+			token = TWKToken(TWKToken::NAME, identifier - text, p - identifier);
 		}
 		else if (*p == '#') {
 			++p;
@@ -571,42 +571,42 @@ void twk_parse(const char* text) {
 		}
 		else {
 			switch (*p) {
-			case '{': token = Token(Token::OPEN_BRACES); break;
-			case '}': token = Token(Token::CLOSE_BRACES); break;
+			case '{': token = TWKToken(TWKToken::OPEN_BRACES); break;
+			case '}': token = TWKToken(TWKToken::CLOSE_BRACES); break;
 			case ' ': case '\t': case '\n': case '\r': break;
-			case ':': token = Token(Token::ASSIGN); break;
-			case ',': token = Token(Token::DELIMITER); break;
+			case ':': token = TWKToken(TWKToken::ASSIGN); break;
+			case ',': token = TWKToken(TWKToken::DELIMITER); break;
 			}
 			++p;
 		}
-		if (token.type != Token::EMPTY) {
+		if (token.type != TWKToken::EMPTY) {
 			tokens.push_back(token);
 		}
 	}
 	int idx = 0;
-	Token& t = tokens[idx];
+	TWKToken& t = tokens[idx];
 	char name[128];
 	float values[128];
 	uint32_t catHash = 0;
 	int currentCategory = -1;
 	int currentName = -1;
 	while (idx < tokens.size()) {
-		if (t.type == Token::NAME) {
+		if (t.type == TWKToken::NAME) {
 			strncpy(name, text + t.index, t.size);
 			name[t.size] = '\0';
-			int strIdx = twk_add_string(name);
+			int strIdx = twk__add_string(name);
 			++idx;
-			Token& n = tokens[idx];
-			if (n.type == Token::OPEN_BRACES) {
+			TWKToken& n = tokens[idx];
+			if (n.type == TWKToken::OPEN_BRACES) {
 				catHash = twk_fnv1a(name);
 				currentCategory = strIdx;
 			}
-			else if (n.type == Token::ASSIGN) {
+			else if (n.type == TWKToken::ASSIGN) {
 				++idx;
-				Token& v = tokens[idx];
+				TWKToken& v = tokens[idx];
 				int count = 0;
-				while (v.type == Token::NUMBER || v.type == Token::DELIMITER) {
-					if (v.type == Token::NUMBER) {
+				while (v.type == TWKToken::NUMBER || v.type == TWKToken::DELIMITER) {
+					if (v.type == TWKToken::NUMBER) {
 						if (count < 128) {
 							values[count++] = v.value;
 						}
@@ -617,7 +617,7 @@ void twk_parse(const char* text) {
 					}
 					v = tokens[idx];
 				}
-				twk_set_value(catHash, currentCategory, name, strIdx, t.size, values, count);
+				twk__set_value(catHash, currentCategory, name, strIdx, t.size, values, count);
 			}
 			else {
 				++idx;
@@ -636,10 +636,10 @@ void twk_parse(const char* text) {
 // load
 // -------------------------------------------------------
 bool twk_load() {
-	if (twk_requires_loading()) {
+	if (twk__requires_loading()) {
 		_settingsCtx->loaded = true;
 		int cnt = 0;
-		const char* _text = twk_load_file(_settingsCtx->fileName, &_settingsCtx->filetime);
+		const char* _text = twk__load_file(_settingsCtx->fileName, &_settingsCtx->filetime);
 		twk_parse(_text);
 		delete[] _text;
 		return true;
