@@ -1,0 +1,118 @@
+settings {
+    max_spawn_enemies : 18
+	grid_base_color : 20,20,20,255
+	player_highlight : 48, 0, 0, 255
+	wake_up_hightlight : 236, 200, 130, 255
+	prepare_ttl : 2.0
+	prepare_flashing_ttl : 0.8
+}
+border_settings {
+    Tension : 0.025
+	Dampening : 0.025
+	Spread : 0.15
+	numX : 48
+	numY : 32
+	thickness : 20.0
+	verticalTexture : 0,0,0,0
+	horizontalTexture : 0,0,0,0
+	textureID : textureID
+	targetHeight : 40.0
+	splashForce : 15.0
+	length : 20.0
+}
+explosion {
+	count : 256
+	angle_variance : 0.1
+	radius : 2
+	radius_variance : 1
+	ttl : 0.6, 0.9
+	velocity : 0,0
+	velocity_variance : 100.0, 240.0
+	size : 0.2,0.1
+	size_variance : 0.05,0.05
+	growth : 0.1,0.1
+	acceleration : -0.6,-0.6
+	texture_rect : 200, 20, 40, 40
+	color : 248, 213, 131, 0
+	decay : 0.9
+}
+light_streaks {
+	count : 48
+	angle_variance : 0.2
+	radius : 2
+	radius_variance : 1
+	ttl : 0.6, 0.9
+	velocity : 0,0
+	velocity_variance : 100.0, 240.0
+	size : 0.4,0.1
+	size_variance : 0.05,0.05
+	growth : 1.2,0.0
+	acceleration : -0.3,-0.3
+	texture_rect : 200, 20, 40, 40
+	color : 255, 64, 0, 255
+	decay : 0.9
+}
+bullet_explosion {
+	count : 16
+	angle_variance : 0.1
+	radius : 2
+	radius_variance : 0
+	ttl : 0.4, 0.6
+	velocity : 0,0
+	velocity_variance : 100.0, 240.0
+	size : 0.5,0.1
+	size_variance : 0,0
+	acceleration : -0.5,-0.5
+	growth : 0.5,0
+	texture_rect : 200, 20, 40, 40
+	color : 42, 202, 236, 255
+	decay : 0.9
+}
+player_trail {
+	count : 8
+	angle_variance : 0.1
+	radius : 12
+	radius_variance : 8
+	ttl : 0.9, 1.5
+	velocity : 0,0
+	velocity_variance : 5,20
+	size : 0.4,0.4
+	size_variance : 0,0
+	growth : -0.3,-0.3
+	acceleration : 0.0,0.0
+	texture_rect : 200, 20, 40, 40
+	color : 255, 32,0,255
+	decay : 0.9
+}
+wake_up {
+	count : 4
+	angle_variance : 0.9
+	radius : 2
+	radius_variance : 1.0
+	ttl : 0.4, 0.7
+	velocity : 0,0
+	velocity_variance : 10,30
+	size : 0.5,0.5
+	size_variance : 0,0
+	growth : 0.4,0.4
+	acceleration : 0.0,0.0
+	texture_rect : 40, 160, 40, 40
+	color : 248, 213, 131, 255
+	decay : 0.9
+}
+death {
+	count : 256
+	angle_variance : 0.1
+	radius : 5
+	radius_variance : 2
+	ttl : 0.6, 1.5
+	velocity : 0,0
+	velocity_variance : 100.0, 400.0
+	size : 0.4,0.4
+	size_variance : 0.1,0.1
+	growth : -0.2,-0.2
+	acceleration : -0.4,-0.4
+	texture_rect : 200, 20, 40, 40
+	color : 248, 213, 131, 255
+	decay : 0.9
+}

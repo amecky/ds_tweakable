@@ -1,0 +1,4 @@
+*.TMP
+vs_2015/ds_tweakable.VC.VC.opendb
+vs_2015/ds_tweakable.VC.db
+vs_2015/test.txt
