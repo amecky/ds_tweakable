@@ -16,6 +16,17 @@ void timingTest() {
 	twk_shutdown();
 }
 
+void verifyTest() {
+	twk_init("..\\test\\settings.json", &errorHandler);
+	float t = 100.0f;
+	twk_add("border_settings", "Tension", &t);
+	twk_load();
+	if (!twk_verify()) {
+		printf("ERROR - not valid\n");
+	}
+	twk_shutdown();
+}
+
 void basicTest() {
 	PerfTimer timer;
 	twk_init("..\\test\\basic_settings.json", &errorHandler);
@@ -53,9 +64,11 @@ void basicTest() {
 
 int main() {
 	
-	timingTest();
+	//timingTest();
+
+	verifyTest();
 	
-	basicTest();
+	//basicTest();
 
     return 0;
 }
