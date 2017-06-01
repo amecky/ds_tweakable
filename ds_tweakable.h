@@ -24,6 +24,22 @@ void twk_add(const char* category, const char* name, ds::Color* value);
 
 void twk_add(const char* category, const char* name, float* array,int size);
 
+bool twk_get(const char* category, const char* name, int* value);
+
+bool twk_get(const char* category, const char* name, uint32_t* value);
+
+bool twk_get(const char* category, const char* name, float* value);
+
+bool twk_get(const char* category, const char* name, ds::vec2* value);
+
+bool twk_get(const char* category, const char* name, ds::vec3* value);
+
+bool twk_get(const char* category, const char* name, ds::vec4* value);
+
+bool twk_get(const char* category, const char* name, ds::Color* value);
+
+bool twk_get(const char* category, const char* name, float* array, int size);
+
 void twk_shutdown();
 
 bool twk_load();
@@ -172,6 +188,7 @@ static void twk__realloc_char_buffer(InternalCharBuffer* buffer, size_t addition
 		buffer->capacity = additional;
 		buffer->indices = new size_t[16];
 		buffer->sizes = new size_t[16];
+		buffer->hashes = new uint32_t[16];
 		buffer->indexCapacity = 16;
 	}
 	else {
@@ -342,6 +359,58 @@ static void twk__report_error(char* format, ...) {
 		(*_settingsCtx->errorHandler)(buffer);
 		va_end(args);
 	}
+}
+
+bool twk_get(const char* category, const char* name, int* value) {
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, uint32_t* value) {
+	return false;
+}
+
+static int twk__find_item(const char* category, const char* name, GameSettingsItem::SettingsType type) {
+	int cidx = twk__find_category(category);
+	if (cidx != -1) {
+		uint32_t hash = twk_fnv1a(name);
+		for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
+			const GameSettingsItem& item = _settingsCtx->items[i];
+			if (item.categoryIndex == cidx && item.hash == hash && item.type == type) {
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+bool twk_get(const char* category, const char* name, float* value) {
+	int idx = twk__find_item(category, name, GameSettingsItem::ST_FLOAT);
+	if (idx != -1) {
+		const GameSettingsItem& item = _settingsCtx->items[idx];
+		*value = *item.ptr.fPtr;
+		return true;
+	}
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, ds::vec2* value) {
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, ds::vec3* value) {
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, ds::vec4* value) {
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, ds::Color* value) {
+	return false;
+}
+
+bool twk_get(const char* category, const char* name, float* array, int size) {
+	return false;
 }
 // -------------------------------------------------------
 // internal token struct
@@ -566,7 +635,7 @@ static float twk__strtof(const char* p, char** endPtr) {
 // -------------------------------------------------------
 // internal find variable
 // -------------------------------------------------------
-static size_t twk__find(int categoryIndex, const char* name) {
+static int twk__find(int categoryIndex, const char* name) {
 	uint32_t hash = twk_fnv1a(name);
 	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
 		if (_settingsCtx->items[i].hash == hash && _settingsCtx->items[i].categoryIndex == categoryIndex) {
@@ -580,7 +649,7 @@ static size_t twk__find(int categoryIndex, const char* name) {
 // internal set value
 // -------------------------------------------------------
 static void twk__set_value(int categoryIndex, const char* name, int nameIndex, int length, float* values, int count) {
-	size_t idx = twk__find(categoryIndex, name);
+	int idx = twk__find(categoryIndex, name);
 	if (idx != -1) {
 		GameSettingsItem& item = _settingsCtx->items[idx];
 		item.nameIndex = nameIndex;
@@ -627,6 +696,9 @@ static void twk__set_value(int categoryIndex, const char* name, int nameIndex, i
 			}
 			item.found = true;
 		}
+	}
+	else {
+		// create internal one as array -> need to store data somewhere (but where????)
 	}
 }
 

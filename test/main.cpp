@@ -56,6 +56,14 @@ void basicTest() {
 			for (int i = 0; i < 10; ++i) {
 				printf("ar[%d] = %g\n", i, ar[i]);
 			}
+
+			float tt = 0.0f;
+			if (twk_get("next", "next_one", &tt)) {
+				printf("tt: %g\n", tt);
+			}
+			else {
+				printf("NO TT FOUND!!!\n");
+			}
 		}
 		Sleep(200);
 	}
@@ -66,9 +74,9 @@ int main() {
 	
 	//timingTest();
 
-	verifyTest();
+	//verifyTest();
 	
-	//basicTest();
+	basicTest();
 
     return 0;
 }
