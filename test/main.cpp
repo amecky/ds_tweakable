@@ -2,6 +2,12 @@
 #include "..\ds_tweakable.h"
 #include "PerfTimer.h"
 
+struct CatTest {
+	float value;
+	ds::Color clr;
+	ds::vec2 vec;
+};
+
 void errorHandler(const char* errorMessage) {
 	printf("%s\n", errorMessage);
 }
@@ -23,6 +29,37 @@ void verifyTest() {
 	twk_load();
 	if (!twk_verify()) {
 		printf("ERROR - not valid\n");
+	}
+	twk_shutdown();
+}
+
+void categoryTest() {
+	twk_init("..\\test\\categories.json", &errorHandler);
+	CatTest cats[5];
+	const char* NAMES[5] = { "cat_one","cat_two","cat_three","cat_four","cat_five" };
+	for (int i = 0; i < 5; ++i) {
+		twk_add(NAMES[i], "value", &cats[i].value);
+		twk_add(NAMES[i], "clr", &cats[i].clr);
+		twk_add(NAMES[i], "vec", &cats[i].vec);
+	}
+	twk_load();
+	if (!twk_verify()) {
+		printf("ERROR - not valid\n");
+	}
+	int num = twk_num_categories();
+	printf("categories: %d\n", num);
+	for (int i = 0; i < num; ++i) {
+		printf("%d = %s\n", i, twk_get_category_name(i));
+	}
+	Tweakable items[32];
+	int nr = twk_get_tweakables(0,items,32);
+	for (int i = 0; i < nr; ++i) {
+		printf("%d = %s (%d)\n", i, items[i].name,items[i].type);
+	}
+	printf("------------\n");
+	for (int i = 0; i < 5; ++i) {
+		printf("value %d: %g\n", i, cats[i].value);
+		printf("vec %d: %g %g\n", i, cats[i].vec.x, cats[i].vec.y);
 	}
 	twk_shutdown();
 }
@@ -70,13 +107,17 @@ void basicTest() {
 	twk_shutdown();
 }
 
+
+
 int main() {
 	
 	//timingTest();
 
 	//verifyTest();
 	
-	basicTest();
+	//basicTest();
+
+	categoryTest();
 
     return 0;
 }

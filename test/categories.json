@@ -1,0 +1,25 @@
+cat_one {
+    value : 100,
+    clr : 200,200,200,200
+    vec : 100,100
+}
+cat_two {
+    value : 200,
+    clr : 200,200,200,200
+    vec : 200,200
+}
+cat_three {
+    value : 300,
+    clr : 200,200,200,200
+    vec : 300,300
+}
+cat_four {
+    value : 400,
+    clr : 200,200,200,200
+    vec : 400,400
+}
+cat_five {
+    value : 500,
+    clr : 200,200,200,200
+    vec : 500,500
+}

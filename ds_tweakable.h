@@ -4,6 +4,24 @@
 #endif // !_CRT_SECURE_NO_WARNINGS
 #include <diesel.h>
 
+enum TweakableType { ST_FLOAT, ST_INT, ST_UINT, ST_VEC2, ST_VEC3, ST_VEC4, ST_COLOR, ST_ARRAY, ST_NONE };
+
+struct Tweakable {
+	TweakableType type;
+	const char* name;
+	union {
+		int* iPtr;
+		uint32_t* uiPtr;
+		float* fPtr;
+		ds::vec2* v2Ptr;
+		ds::vec3* v3Ptr;
+		ds::vec4* v4Ptr;
+		ds::Color* cPtr;
+		float* arPtr;
+	} ptr;
+	int arrayLength;
+};
+
 typedef void(*twkErrorHandler)(const char* errorMessage);
 
 void twk_init(const char* fileName, twkErrorHandler = 0);
@@ -24,21 +42,11 @@ void twk_add(const char* category, const char* name, ds::Color* value);
 
 void twk_add(const char* category, const char* name, float* array,int size);
 
-bool twk_get(const char* category, const char* name, int* value);
+int twk_num_categories();
 
-bool twk_get(const char* category, const char* name, uint32_t* value);
+const char* twk_get_category_name(int index);
 
-bool twk_get(const char* category, const char* name, float* value);
-
-bool twk_get(const char* category, const char* name, ds::vec2* value);
-
-bool twk_get(const char* category, const char* name, ds::vec3* value);
-
-bool twk_get(const char* category, const char* name, ds::vec4* value);
-
-bool twk_get(const char* category, const char* name, ds::Color* value);
-
-bool twk_get(const char* category, const char* name, float* array, int size);
+int twk_get_tweakables(int categoryIndex, Tweakable* ret, int max);
 
 void twk_shutdown();
 
@@ -67,13 +75,11 @@ struct TWKCategory {
 	uint16_t nameIndex;
 };
 
-struct GameSettingsItem {
-
-	enum SettingsType { ST_FLOAT, ST_INT, ST_UINT, ST_VEC2,	ST_VEC3, ST_VEC4, ST_COLOR,	ST_ARRAY, ST_NONE };
+struct InternalTweakable {
 
 	size_t categoryIndex;
 	uint32_t hash;
-	SettingsType type;
+	TweakableType type;
 	int nameIndex;
 	int length;
 	union {
@@ -107,51 +113,51 @@ struct InternalCharBuffer {
 // -------------------------------------------------------
 // internal settings context
 // -------------------------------------------------------
-struct SettingsContext {
+struct TWKContext {
 	const char* fileName;
 	FILETIME filetime;
-	std::vector<GameSettingsItem> items;
+	std::vector<InternalTweakable> items;
 	std::vector<TWKCategory> categories;
 	bool loaded;
 	InternalCharBuffer charBuffer;
 	twkErrorHandler errorHandler;
 };
 
-static SettingsContext* _settingsCtx = 0;
+static TWKContext* _twkCtx = 0;
 
 // -------------------------------------------------------
 // init
 // -------------------------------------------------------
 void twk_init(const char* fileName, twkErrorHandler errorHandler) {
-	_settingsCtx = new SettingsContext;
-	_settingsCtx->fileName = fileName;
-	_settingsCtx->loaded = false;
-	_settingsCtx->charBuffer.data = 0;
-	_settingsCtx->charBuffer.capacity = 0;
-	_settingsCtx->charBuffer.count = 0;
-	_settingsCtx->charBuffer.indices = 0;
-	_settingsCtx->charBuffer.sizes = 0;
-	_settingsCtx->charBuffer.size = 0;
-	_settingsCtx->charBuffer.indexCapacity = 0;
-	_settingsCtx->charBuffer.hashes = 0;
-	_settingsCtx->errorHandler = errorHandler;
+	_twkCtx = new TWKContext;
+	_twkCtx->fileName = fileName;
+	_twkCtx->loaded = false;
+	_twkCtx->charBuffer.data = 0;
+	_twkCtx->charBuffer.capacity = 0;
+	_twkCtx->charBuffer.count = 0;
+	_twkCtx->charBuffer.indices = 0;
+	_twkCtx->charBuffer.sizes = 0;
+	_twkCtx->charBuffer.size = 0;
+	_twkCtx->charBuffer.indexCapacity = 0;
+	_twkCtx->charBuffer.hashes = 0;
+	_twkCtx->errorHandler = errorHandler;
 }
 
 // -------------------------------------------------------
 // shutdown
 // -------------------------------------------------------
 void twk_shutdown() {
-	if (_settingsCtx != 0) {
-		if (_settingsCtx->charBuffer.data != 0) {
-			delete[] _settingsCtx->charBuffer.data;
+	if (_twkCtx != 0) {
+		if (_twkCtx->charBuffer.data != 0) {
+			delete[] _twkCtx->charBuffer.data;
 		}
-		if (_settingsCtx->charBuffer.indices != 0) {
-			delete[] _settingsCtx->charBuffer.indices;
+		if (_twkCtx->charBuffer.indices != 0) {
+			delete[] _twkCtx->charBuffer.indices;
 		}
-		if (_settingsCtx->charBuffer.sizes != 0) {
-			delete[] _settingsCtx->charBuffer.sizes;
+		if (_twkCtx->charBuffer.sizes != 0) {
+			delete[] _twkCtx->charBuffer.sizes;
 		}
-		delete _settingsCtx;
+		delete _twkCtx;
 	}
 }
 
@@ -171,8 +177,8 @@ inline uint32_t twk_fnv1a(const char* text, uint32_t hash = TWK__FNV_Seed) {
 
 static int twk__find_category(const char* category) {
 	uint32_t categoryHash = twk_fnv1a(category);
-	for (size_t i = 0; i < _settingsCtx->categories.size(); ++i) {
-		if (_settingsCtx->categories[i].hash == categoryHash) {
+	for (size_t i = 0; i < _twkCtx->categories.size(); ++i) {
+		if (_twkCtx->categories[i].hash == categoryHash) {
 			return static_cast<int>(i);
 		}
 	}
@@ -220,8 +226,8 @@ static void twk__reallocate_indices(InternalCharBuffer* buffer, size_t additiona
 }
 
 static int twk__find_string(uint32_t hash) {
-	for (int i = 0; i < _settingsCtx->charBuffer.count; ++i) {
-		if (_settingsCtx->charBuffer.hashes[i] == hash) {
+	for (int i = 0; i < _twkCtx->charBuffer.count; ++i) {
+		if (_twkCtx->charBuffer.hashes[i] == hash) {
 			return i;
 		}
 	}
@@ -237,39 +243,39 @@ static int twk__add_string(const char* txt) {
 		return strIdx;
 	}
 	size_t l = strlen(txt);
-	if ((l + _settingsCtx->charBuffer.size + 1) >= _settingsCtx->charBuffer.capacity) {
-		twk__realloc_char_buffer(&_settingsCtx->charBuffer, l * 2);
+	if ((l + _twkCtx->charBuffer.size + 1) >= _twkCtx->charBuffer.capacity) {
+		twk__realloc_char_buffer(&_twkCtx->charBuffer, l * 2);
 	}
-	if (_settingsCtx->charBuffer.count + 1 >= _settingsCtx->charBuffer.indexCapacity) {
-		twk__reallocate_indices(&_settingsCtx->charBuffer, 16);
+	if (_twkCtx->charBuffer.count + 1 >= _twkCtx->charBuffer.indexCapacity) {
+		twk__reallocate_indices(&_twkCtx->charBuffer, 16);
 	}
-	size_t current = _settingsCtx->charBuffer.size;
-	char* dest = _settingsCtx->charBuffer.data + current;
-	_settingsCtx->charBuffer.indices[_settingsCtx->charBuffer.count] = current;
-	_settingsCtx->charBuffer.sizes[_settingsCtx->charBuffer.count] = l + 1;
-	_settingsCtx->charBuffer.hashes[_settingsCtx->charBuffer.count] = hash;
-	++_settingsCtx->charBuffer.count;
+	size_t current = _twkCtx->charBuffer.size;
+	char* dest = _twkCtx->charBuffer.data + current;
+	_twkCtx->charBuffer.indices[_twkCtx->charBuffer.count] = current;
+	_twkCtx->charBuffer.sizes[_twkCtx->charBuffer.count] = l + 1;
+	_twkCtx->charBuffer.hashes[_twkCtx->charBuffer.count] = hash;
+	++_twkCtx->charBuffer.count;
 	strncpy(dest, txt, l);
-	_settingsCtx->charBuffer.size += l + 1;
+	_twkCtx->charBuffer.size += l + 1;
 	dest[l] = '\0';
-	return _settingsCtx->charBuffer.count - 1;
+	return _twkCtx->charBuffer.count - 1;
 }
 
 static char* twk__get_string(int index) {
-	return _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[index];
+	return _twkCtx->charBuffer.data + _twkCtx->charBuffer.indices[index];
 }
 // -------------------------------------------------------
 // internal add
 // -------------------------------------------------------
-static size_t twk_internal_add(const char* category, const char* name, GameSettingsItem::SettingsType type) {
-	GameSettingsItem item;
+static size_t twk_internal_add(const char* category, const char* name, TweakableType type) {
+	InternalTweakable item;
 	int catIdx = twk__find_category(category);
 	if (catIdx == -1) {
 		TWKCategory cat;
 		cat.hash = twk_fnv1a(category);
 		cat.nameIndex = twk__add_string(category);
-		_settingsCtx->categories.push_back(cat);
-		catIdx = static_cast<int>(_settingsCtx->categories.size()) - 1;
+		_twkCtx->categories.push_back(cat);
+		catIdx = static_cast<int>(_twkCtx->categories.size()) - 1;
 	}
 	item.categoryIndex = catIdx;
 	item.hash = twk_fnv1a(name);
@@ -277,86 +283,86 @@ static size_t twk_internal_add(const char* category, const char* name, GameSetti
 	item.arrayLength = 0;
 	item.found = false;
 	item.nameIndex = twk__add_string(name);
-	_settingsCtx->items.push_back(item);
-	return _settingsCtx->items.size() - 1;
+	_twkCtx->items.push_back(item);
+	return _twkCtx->items.size() - 1;
 }
 
 // -------------------------------------------------------
 // add int
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, int* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_INT);
-	_settingsCtx->items[idx].ptr.iPtr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_INT);
+	_twkCtx->items[idx].ptr.iPtr = value;
 }
 
 // -------------------------------------------------------
 // add uint32_t
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, uint32_t* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_UINT);
-	_settingsCtx->items[idx].ptr.uiPtr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_UINT);
+	_twkCtx->items[idx].ptr.uiPtr = value;
 }
 
 // -------------------------------------------------------
 // add float
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, float* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_FLOAT);
-	_settingsCtx->items[idx].ptr.fPtr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_FLOAT);
+	_twkCtx->items[idx].ptr.fPtr = value;
 }
 
 // -------------------------------------------------------
 // add vec2
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec2* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC2);
-	_settingsCtx->items[idx].ptr.v2Ptr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_VEC2);
+	_twkCtx->items[idx].ptr.v2Ptr = value;
 }
 
 // -------------------------------------------------------
 // add vec3
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec3* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC3);
-	_settingsCtx->items[idx].ptr.v3Ptr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_VEC3);
+	_twkCtx->items[idx].ptr.v3Ptr = value;
 }
 
 // -------------------------------------------------------
 // add vec4
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::vec4* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_VEC4);
-	_settingsCtx->items[idx].ptr.v4Ptr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_VEC4);
+	_twkCtx->items[idx].ptr.v4Ptr = value;
 }
 
 // -------------------------------------------------------
 // add color
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, ds::Color* value) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_COLOR);
-	_settingsCtx->items[idx].ptr.cPtr = value;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_COLOR);
+	_twkCtx->items[idx].ptr.cPtr = value;
 }
 
 // -------------------------------------------------------
 // add array
 // -------------------------------------------------------
 void twk_add(const char* category, const char* name, float* array, int size) {
-	size_t idx = twk_internal_add(category, name, GameSettingsItem::ST_ARRAY);
-	_settingsCtx->items[idx].ptr.arPtr = array;
-	_settingsCtx->items[idx].arrayLength = size;
+	size_t idx = twk_internal_add(category, name, TweakableType::ST_ARRAY);
+	_twkCtx->items[idx].ptr.arPtr = array;
+	_twkCtx->items[idx].arrayLength = size;
 }
 
 // ------------------------------------------------------------
 // internal error reporting using the twkErrorHandle callback
 // ------------------------------------------------------------
 static void twk__report_error(char* format, ...) {
-	if (_settingsCtx->errorHandler != 0) {
+	if (_twkCtx->errorHandler != 0) {
 		va_list args;
 		va_start(args, format);
 		char buffer[1024];
 		memset(buffer, 0, sizeof(buffer));
 		int written = vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, format, args);	
-		(*_settingsCtx->errorHandler)(buffer);
+		(*_twkCtx->errorHandler)(buffer);
 		va_end(args);
 	}
 }
@@ -369,12 +375,12 @@ bool twk_get(const char* category, const char* name, uint32_t* value) {
 	return false;
 }
 
-static int twk__find_item(const char* category, const char* name, GameSettingsItem::SettingsType type) {
+static int twk__find_item(const char* category, const char* name, TweakableType type) {
 	int cidx = twk__find_category(category);
 	if (cidx != -1) {
 		uint32_t hash = twk_fnv1a(name);
-		for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-			const GameSettingsItem& item = _settingsCtx->items[i];
+		for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+			const InternalTweakable& item = _twkCtx->items[i];
 			if (item.categoryIndex == cidx && item.hash == hash && item.type == type) {
 				return i;
 			}
@@ -384,9 +390,9 @@ static int twk__find_item(const char* category, const char* name, GameSettingsIt
 }
 
 bool twk_get(const char* category, const char* name, float* value) {
-	int idx = twk__find_item(category, name, GameSettingsItem::ST_FLOAT);
+	int idx = twk__find_item(category, name, TweakableType::ST_FLOAT);
 	if (idx != -1) {
-		const GameSettingsItem& item = _settingsCtx->items[idx];
+		const InternalTweakable& item = _twkCtx->items[idx];
 		*value = *item.ptr.fPtr;
 		return true;
 	}
@@ -440,35 +446,35 @@ void twk_save() {
 	FILE* fp = fopen("test.txt", "w");
 	int currentCategory = -1;
 	if (fp) {
-		for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-			const GameSettingsItem& item = _settingsCtx->items[i];
+		for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+			const InternalTweakable& item = _twkCtx->items[i];
 			if (item.categoryIndex != currentCategory) {
 				if (currentCategory != -1) {
 					fprintf(fp,"}\n");
 				}
 				int cidx = static_cast<int>(item.categoryIndex);
-				int cnIdx = _settingsCtx->categories[cidx].nameIndex;
-				char* src = _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[cnIdx];
-				size_t l = _settingsCtx->charBuffer.sizes[cnIdx];
+				int cnIdx = _twkCtx->categories[cidx].nameIndex;
+				char* src = _twkCtx->charBuffer.data + _twkCtx->charBuffer.indices[cnIdx];
+				size_t l = _twkCtx->charBuffer.sizes[cnIdx];
 				strncpy(name, src, l);
 				name[l] = '\0';
 				fprintf(fp, "%s {\n", name);
 				currentCategory = static_cast<int>(item.categoryIndex);
 			}
 			int nidx = item.nameIndex;
-			char* src = _settingsCtx->charBuffer.data + _settingsCtx->charBuffer.indices[nidx];
-			size_t l = _settingsCtx->charBuffer.sizes[nidx];
+			char* src = _twkCtx->charBuffer.data + _twkCtx->charBuffer.indices[nidx];
+			size_t l = _twkCtx->charBuffer.sizes[nidx];
 			strncpy(name, src, l);
 			name[l] = '\0';
 			fprintf(fp, "\t%s : ", name);
 			switch (item.type) {
-				case GameSettingsItem::ST_INT: fprintf(fp, "%d\n", *item.ptr.iPtr); break;
-				case GameSettingsItem::ST_UINT: fprintf(fp, "%d\n", *item.ptr.uiPtr); break;
-				case GameSettingsItem::ST_FLOAT: fprintf(fp, "%g\n", *item.ptr.fPtr); break;
-				case GameSettingsItem::ST_VEC2 : fprintf(fp, "%g, %g\n", item.ptr.v2Ptr->x, item.ptr.v2Ptr->y); break;
-				case GameSettingsItem::ST_VEC3: fprintf(fp, "%g, %g, %g\n", item.ptr.v3Ptr->x, item.ptr.v3Ptr->y, item.ptr.v3Ptr->z); break;
-				case GameSettingsItem::ST_VEC4: fprintf(fp, "%g, %g, %g, %g\n", item.ptr.v4Ptr->x, item.ptr.v4Ptr->y, item.ptr.v4Ptr->z, item.ptr.v4Ptr->w); break;
-				case GameSettingsItem::ST_COLOR: {
+				case TweakableType::ST_INT: fprintf(fp, "%d\n", *item.ptr.iPtr); break;
+				case TweakableType::ST_UINT: fprintf(fp, "%d\n", *item.ptr.uiPtr); break;
+				case TweakableType::ST_FLOAT: fprintf(fp, "%g\n", *item.ptr.fPtr); break;
+				case TweakableType::ST_VEC2 : fprintf(fp, "%g, %g\n", item.ptr.v2Ptr->x, item.ptr.v2Ptr->y); break;
+				case TweakableType::ST_VEC3: fprintf(fp, "%g, %g, %g\n", item.ptr.v3Ptr->x, item.ptr.v3Ptr->y, item.ptr.v3Ptr->z); break;
+				case TweakableType::ST_VEC4: fprintf(fp, "%g, %g, %g, %g\n", item.ptr.v4Ptr->x, item.ptr.v4Ptr->y, item.ptr.v4Ptr->z, item.ptr.v4Ptr->w); break;
+				case TweakableType::ST_COLOR: {
 					for (int j = 0; j < 4; ++j) {
 						if (j != 0) {
 							fprintf(fp, ", ");
@@ -479,7 +485,7 @@ void twk_save() {
 					fprintf(fp, "\n");
 					break;
 				}
-				case GameSettingsItem::ST_ARRAY: {
+				case TweakableType::ST_ARRAY: {
 					int la = item.arrayLength;
 					for (int j = 0; j < la; ++j) {
 						if (j != 0) {
@@ -637,8 +643,8 @@ static float twk__strtof(const char* p, char** endPtr) {
 // -------------------------------------------------------
 static int twk__find(int categoryIndex, const char* name) {
 	uint32_t hash = twk_fnv1a(name);
-	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-		if (_settingsCtx->items[i].hash == hash && _settingsCtx->items[i].categoryIndex == categoryIndex) {
+	for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+		if (_twkCtx->items[i].hash == hash && _twkCtx->items[i].categoryIndex == categoryIndex) {
 			return i;
 		}
 	}
@@ -651,46 +657,46 @@ static int twk__find(int categoryIndex, const char* name) {
 static void twk__set_value(int categoryIndex, const char* name, int nameIndex, int length, float* values, int count) {
 	int idx = twk__find(categoryIndex, name);
 	if (idx != -1) {
-		GameSettingsItem& item = _settingsCtx->items[idx];
+		InternalTweakable& item = _twkCtx->items[idx];
 		item.nameIndex = nameIndex;
 		item.length = length;
-		if (item.type == GameSettingsItem::ST_INT && count == 1) {
+		if (item.type == TweakableType::ST_INT && count == 1) {
 			*item.ptr.iPtr = static_cast<int>(values[0]);
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_UINT && count == 1) {
+		else if (item.type == TweakableType::ST_UINT && count == 1) {
 			*item.ptr.uiPtr = static_cast<uint32_t>(values[0]);
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_FLOAT && count == 1) {
+		else if (item.type == TweakableType::ST_FLOAT && count == 1) {
 			*item.ptr.fPtr = values[0];
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_VEC2 && count == 2) {
+		else if (item.type == TweakableType::ST_VEC2 && count == 2) {
 			item.ptr.v2Ptr->x = values[0];
 			item.ptr.v2Ptr->y = values[1];
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_VEC3 && count == 3) {
+		else if (item.type == TweakableType::ST_VEC3 && count == 3) {
 			item.ptr.v3Ptr->x = values[0];
 			item.ptr.v3Ptr->y = values[1];
 			item.ptr.v3Ptr->z = values[2];
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_VEC4 && count == 4) {
+		else if (item.type == TweakableType::ST_VEC4 && count == 4) {
 			item.ptr.v4Ptr->x = values[0];
 			item.ptr.v4Ptr->y = values[1];
 			item.ptr.v4Ptr->z = values[2];
 			item.ptr.v4Ptr->w = values[3];
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_COLOR && count == 4) {
+		else if (item.type == TweakableType::ST_COLOR && count == 4) {
 			for (int i = 0; i < 4; ++i) {
 				item.ptr.cPtr->values[i] = values[i] / 255.0f;
 			}
 			item.found = true;
 		}
-		else if (item.type == GameSettingsItem::ST_ARRAY && count == item.arrayLength) {
+		else if (item.type == TweakableType::ST_ARRAY && count == item.arrayLength) {
 			for (int i = 0; i < count; ++i) {
 				item.ptr.arPtr[i] = values[i];
 			}
@@ -706,13 +712,13 @@ static void twk__set_value(int categoryIndex, const char* name, int nameIndex, i
 // internal check if the file should be (re)loaded
 // -------------------------------------------------------
 static bool twk__requires_loading() {
-	if (!_settingsCtx->loaded) {
+	if (!_twkCtx->loaded) {
 		return true;
 	}
 	FILETIME now;
-	if (twk__get_filetime(_settingsCtx->fileName, &now)) {
-		if (CompareFileTime(&_settingsCtx->filetime, &now) == -1) {
-			_settingsCtx->filetime = now;
+	if (twk__get_filetime(_twkCtx->fileName, &now)) {
+		if (CompareFileTime(&_twkCtx->filetime, &now) == -1) {
+			_twkCtx->filetime = now;
 			return true;
 		}
 	}
@@ -728,8 +734,8 @@ void twk_parse(const char* text) {
 	//_settingsCtx->charBuffer.count = 0;
 	//_settingsCtx->charBuffer.size = 0;
 	// reset found to false for every item
-	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-		_settingsCtx->items[i].found = false;
+	for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+		_twkCtx->items[i].found = false;
 	}
 	const char* p = text;
 	std::vector<TWKToken> tokens;
@@ -793,8 +799,8 @@ void twk_parse(const char* text) {
 					TWKCategory cat;
 					cat.hash = twk_fnv1a(name);
 					cat.nameIndex = twk__add_string(name);
-					_settingsCtx->categories.push_back(cat);
-					currentCategory = static_cast<int>(_settingsCtx->categories.size()) - 1;
+					_twkCtx->categories.push_back(cat);
+					currentCategory = static_cast<int>(_twkCtx->categories.size()) - 1;
 				}		
 				else {
 					currentCategory = cidx;
@@ -830,8 +836,8 @@ void twk_parse(const char* text) {
 			t = tokens[idx];
 		}
 	}
-	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-		const GameSettingsItem& item = _settingsCtx->items[i];
+	for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+		const InternalTweakable& item = _twkCtx->items[i];
 		if (!item.found) {
 			char* in = twk__get_string(item.nameIndex);
 			twk__report_error("Item '%s' not found", in);
@@ -844,9 +850,9 @@ void twk_parse(const char* text) {
 // -------------------------------------------------------
 bool twk_load() {
 	if (twk__requires_loading()) {
-		_settingsCtx->loaded = true;
+		_twkCtx->loaded = true;
 		int cnt = 0;
-		const char* _text = twk__load_file(_settingsCtx->fileName, &_settingsCtx->filetime);
+		const char* _text = twk__load_file(_twkCtx->fileName, &_twkCtx->filetime);
 		if (_text != 0) {
 			twk_parse(_text);
 			delete[] _text;
@@ -857,14 +863,64 @@ bool twk_load() {
 	return false;
 }
 
+// -------------------------------------------------------
+// verify that all items were found
+// -------------------------------------------------------
 bool twk_verify() {
-	for (size_t i = 0; i < _settingsCtx->items.size(); ++i) {
-		const GameSettingsItem& item = _settingsCtx->items[i];
+	for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+		const InternalTweakable& item = _twkCtx->items[i];
 		if (!item.found) {
 			return false;
 		}
 	}
 	return true;
+}
+
+// -------------------------------------------------------
+// number of categories
+// -------------------------------------------------------
+int twk_num_categories() {
+	return _twkCtx->categories.size();
+}
+
+// -------------------------------------------------------
+// category name 
+// -------------------------------------------------------
+const char* twk_get_category_name(int index) {
+	const TWKCategory c = _twkCtx->categories[index];
+	int idx = c.nameIndex;
+	int offset = _twkCtx->charBuffer.indices[idx];
+	const char* name = _twkCtx->charBuffer.data + offset;
+	return _twkCtx->charBuffer.data + offset;
+}
+
+// -------------------------------------------------------
+// all tweakbales for one category
+// -------------------------------------------------------
+int twk_get_tweakables(int categoryIndex, Tweakable* ret, int max) {
+	int cnt = 0;
+	for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+		const InternalTweakable& item = _twkCtx->items[i];
+		if (item.categoryIndex == categoryIndex && cnt < max) {
+			Tweakable& t = ret[cnt++];
+			t.type = item.type;
+			switch (item.type) {
+				case ST_FLOAT: t.ptr.fPtr = item.ptr.fPtr; break;
+				case ST_INT: t.ptr.iPtr = item.ptr.iPtr; break;
+				case ST_UINT: t.ptr.uiPtr = item.ptr.uiPtr; break;
+				case ST_VEC2: t.ptr.v2Ptr = item.ptr.v2Ptr; break;
+				case ST_VEC3: t.ptr.v3Ptr = item.ptr.v3Ptr; break;
+				case ST_VEC4: t.ptr.v4Ptr = item.ptr.v4Ptr; break;
+				case ST_COLOR: t.ptr.cPtr = item.ptr.cPtr; break;
+				case ST_ARRAY: t.ptr.arPtr = item.ptr.arPtr; break;
+			}
+			t.arrayLength = item.arrayLength;
+			int nidx = item.nameIndex;
+			int offset = _twkCtx->charBuffer.indices[nidx];
+			t.name = _twkCtx->charBuffer.data + offset;
+		}
+	}
+	return cnt;
 }
 
 #endif // GAMESETTINGS_IMPLEMENTATION
