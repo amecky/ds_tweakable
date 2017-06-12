@@ -211,15 +211,15 @@ static void twk__realloc_char_buffer(InternalCharBuffer* buffer, size_t addition
 // -------------------------------------------------------
 static void twk__reallocate_indices(InternalCharBuffer* buffer, size_t additional) {
 	size_t* tmpi = new size_t[buffer->indexCapacity + additional];
-	memcpy(tmpi, buffer->indices, buffer->count);
+	memcpy(tmpi, buffer->indices, buffer->count * sizeof(size_t));
 	delete[] buffer->indices;
 	buffer->indices = tmpi;
 	size_t* tmps = new size_t[buffer->indexCapacity + additional];
-	memcpy(tmps, buffer->sizes, buffer->count);
+	memcpy(tmps, buffer->sizes, buffer->count * sizeof(size_t));
 	delete[] buffer->sizes;
 	buffer->sizes = tmps;
 	uint32_t* tmph = new uint32_t[buffer->indexCapacity + additional];
-	memcpy(tmph, buffer->hashes, buffer->count);
+	memcpy(tmph, buffer->hashes, buffer->count * sizeof(uint32_t));
 	delete[] buffer->hashes;
 	buffer->hashes = tmph;
 	buffer->indexCapacity += additional;
