@@ -479,7 +479,7 @@ void twk_save() {
 						if (j != 0) {
 							fprintf(fp, ", ");
 						}
-						int v = static_cast<int>(item.ptr.cPtr->values[j] * 255.0f);
+						int v = static_cast<int>(item.ptr.cPtr->data[j] * 255.0f);
 						fprintf(fp, "%d", v);
 					}
 					fprintf(fp, "\n");
@@ -692,7 +692,7 @@ static void twk__set_value(int categoryIndex, const char* name, int nameIndex, i
 		}
 		else if (item.type == TweakableType::ST_COLOR && count == 4) {
 			for (int i = 0; i < 4; ++i) {
-				item.ptr.cPtr->values[i] = values[i] / 255.0f;
+				item.ptr.cPtr->data[i] = values[i] / 255.0f;
 			}
 			item.found = true;
 		}
