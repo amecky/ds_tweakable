@@ -24,6 +24,8 @@ struct Tweakable {
 
 typedef void(*twkErrorHandler)(const char* errorMessage);
 
+void twk_init(twkErrorHandler = 0);
+
 void twk_init(const char* fileName, twkErrorHandler = 0);
 
 void twk_add(const char* category, const char* name, int* value);
@@ -47,6 +49,8 @@ int twk_num_categories();
 const char* twk_get_category_name(int index);
 
 int twk_get_tweakables(int categoryIndex, Tweakable* ret, int max);
+
+int twk_get_tweakables(const char* category, Tweakable* ret, int max);
 
 void twk_shutdown();
 
@@ -119,6 +123,7 @@ struct TWKContext {
 	std::vector<InternalTweakable> items;
 	std::vector<TWKCategory> categories;
 	bool loaded;
+	bool reloadable;
 	InternalCharBuffer charBuffer;
 	twkErrorHandler errorHandler;
 };
@@ -128,10 +133,7 @@ static TWKContext* _twkCtx = 0;
 // -------------------------------------------------------
 // init
 // -------------------------------------------------------
-void twk_init(const char* fileName, twkErrorHandler errorHandler) {
-	_twkCtx = new TWKContext;
-	_twkCtx->fileName = fileName;
-	_twkCtx->loaded = false;
+static void twk__common_init(twkErrorHandler errorHandler) {
 	_twkCtx->charBuffer.data = 0;
 	_twkCtx->charBuffer.capacity = 0;
 	_twkCtx->charBuffer.count = 0;
@@ -142,6 +144,24 @@ void twk_init(const char* fileName, twkErrorHandler errorHandler) {
 	_twkCtx->charBuffer.hashes = 0;
 	_twkCtx->errorHandler = errorHandler;
 }
+
+void twk_init(const char* fileName, twkErrorHandler errorHandler) {
+	_twkCtx = new TWKContext;
+	_twkCtx->fileName = fileName;
+	_twkCtx->loaded = false;
+	_twkCtx->reloadable = true;
+	twk__common_init(errorHandler);
+}
+
+void twk_init(twkErrorHandler errorHandler) {
+	_twkCtx = new TWKContext;
+	_twkCtx->fileName = '\0';
+	_twkCtx->loaded = true;
+	_twkCtx->reloadable = false;
+	twk__common_init(errorHandler);
+}
+
+
 
 // -------------------------------------------------------
 // shutdown
@@ -479,7 +499,7 @@ void twk_save() {
 						if (j != 0) {
 							fprintf(fp, ", ");
 						}
-						int v = static_cast<int>(item.ptr.cPtr->values[j] * 255.0f);
+						int v = static_cast<int>(item.ptr.cPtr->data[j] * 255.0f);
 						fprintf(fp, "%d", v);
 					}
 					fprintf(fp, "\n");
@@ -692,7 +712,7 @@ static void twk__set_value(int categoryIndex, const char* name, int nameIndex, i
 		}
 		else if (item.type == TweakableType::ST_COLOR && count == 4) {
 			for (int i = 0; i < 4; ++i) {
-				item.ptr.cPtr->values[i] = values[i] / 255.0f;
+				item.ptr.cPtr->data[i] = values[i] / 255.0f;
 			}
 			item.found = true;
 		}
@@ -849,7 +869,7 @@ void twk_parse(const char* text) {
 // load
 // -------------------------------------------------------
 bool twk_load() {
-	if (twk__requires_loading()) {
+	if (twk__requires_loading() && _twkCtx->reloadable) {
 		_twkCtx->loaded = true;
 		int cnt = 0;
 		const char* _text = twk__load_file(_twkCtx->fileName, &_twkCtx->filetime);
@@ -918,6 +938,38 @@ int twk_get_tweakables(int categoryIndex, Tweakable* ret, int max) {
 			int nidx = item.nameIndex;
 			int offset = _twkCtx->charBuffer.indices[nidx];
 			t.name = _twkCtx->charBuffer.data + offset;
+		}
+	}
+	return cnt;
+}
+
+// -------------------------------------------------------
+// all tweakbales for one category
+// -------------------------------------------------------
+int twk_get_tweakables(const char* category, Tweakable* ret, int max) {
+	int cid = twk__find_category(category);
+	int cnt = 0;
+	if (cid != -1) {		
+		for (size_t i = 0; i < _twkCtx->items.size(); ++i) {
+			const InternalTweakable& item = _twkCtx->items[i];
+			if (item.categoryIndex == cid && cnt < max) {
+				Tweakable& t = ret[cnt++];
+				t.type = item.type;
+				switch (item.type) {
+				case ST_FLOAT: t.ptr.fPtr = item.ptr.fPtr; break;
+				case ST_INT: t.ptr.iPtr = item.ptr.iPtr; break;
+				case ST_UINT: t.ptr.uiPtr = item.ptr.uiPtr; break;
+				case ST_VEC2: t.ptr.v2Ptr = item.ptr.v2Ptr; break;
+				case ST_VEC3: t.ptr.v3Ptr = item.ptr.v3Ptr; break;
+				case ST_VEC4: t.ptr.v4Ptr = item.ptr.v4Ptr; break;
+				case ST_COLOR: t.ptr.cPtr = item.ptr.cPtr; break;
+				case ST_ARRAY: t.ptr.arPtr = item.ptr.arPtr; break;
+				}
+				t.arrayLength = item.arrayLength;
+				int nidx = item.nameIndex;
+				int offset = _twkCtx->charBuffer.indices[nidx];
+				t.name = _twkCtx->charBuffer.data + offset;
+			}
 		}
 	}
 	return cnt;
